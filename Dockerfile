@@ -1,11 +1,9 @@
-# Imagen base con PHP 8.4
+# Imagen base con PHP 8.4 y Nginx
 FROM php:8.4-fpm
 
-# Instalar todo lo necesario
+# Instalar Nginx y dependencias
 RUN apt-get update && apt-get install -y \
-    # Servidor web
     nginx \
-    # Herramientas del sistema
     git \
     curl \
     wget \
@@ -13,7 +11,6 @@ RUN apt-get update && apt-get install -y \
     nano \
     cron \
     supervisor \
-    # Dependencias de PHP
     libpng-dev \
     libonig-dev \
     libxml2-dev \
@@ -23,14 +20,11 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libssl-dev \
     libcurl4-openssl-dev \
-    # Moodle específico
     ghostscript \
     graphviz \
-    aspell \
-    aspell-es \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar extensiones PHP para Moodle
+# Extensiones PHP
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
     gd \
@@ -45,22 +39,40 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     sockets \
     exif
 
-# Instalar Composer
+# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Crear directorios necesarios
-RUN mkdir -p /var/www/html \
-    /var/moodledata \
-    /var/log/supervisor \
-    /var/log/nginx \
-    /var/log/php
+# Directorios
+RUN mkdir -p /var/www/html /var/moodledata /var/log/nginx
+RUN chown -R www-data:www-data /var/www/html /var/moodledata
 
-# Configurar permisos
-RUN chown -R www-data:www-data /var/www/html /var/moodledata \
-    && chmod -R 755 /var/www/html
+# Configurar Nginx
+RUN echo 'server { \
+    listen 80; \
+    server_name _; \
+    root /var/www/html; \
+    index index.php index.html; \
+    \
+    location / { \
+        try_files \$uri \$uri/ /index.php?\$query_string; \
+    } \
+    \
+    location ~ \.php\$ { \
+        fastcgi_pass 127.0.0.1:9000; \
+        fastcgi_index index.php; \
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name; \
+        include fastcgi_params; \
+    } \
+}' > /etc/nginx/sites-available/default
 
-# Puerto
+RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/ \
+    && rm -f /etc/nginx/sites-enabled/default
+
+# Script de inicio
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 EXPOSE 80
 
-# Comando de inicio optimizado para Dokploy
-CMD ["sh", "-c", "mkdir -p /var/moodledata && chmod 777 /var/moodledata && echo 'Moodle 5.1 listo' && sleep infinity"]
+# Usar Supervisor para manejar ambos procesos
+CMD ["/start.sh"]
