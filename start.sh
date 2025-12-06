@@ -1,11 +1,6 @@
 #!/bin/bash
 
-echo "========================================"
-echo "🚀 INICIANDO MOODLE 5.1"
-echo "========================================"
-
-# Esperar a que la BD esté lista (solo para desarrollo)
-sleep 10
+echo "🚀 Iniciando Moodle..."
 
 # Clonar Moodle si no existe
 if [ ! -f "/var/www/html/version.php" ]; then
@@ -14,15 +9,21 @@ if [ ! -f "/var/www/html/version.php" ]; then
     cp -rf /tmp/moodle/. /var/www/html/
     rm -rf /tmp/moodle
     echo "✅ Moodle clonado"
+    
+    # Permisos
+    chown -R www-data:www-data /var/www/html /var/moodledata
+    chmod -R 755 /var/www/html
+    chmod -R 777 /var/moodledata
 fi
 
-# Configurar permisos
-chown -R www-data:www-data /var/www/html /var/moodledata
-chmod -R 755 /var/www/html
-chmod -R 777 /var/moodledata
+# Configurar PHP para Moodle
+echo "memory_limit = 512M" >> /usr/local/etc/php/conf.d/moodle.ini
+echo "upload_max_filesize = 100M" >> /usr/local/etc/php/conf.d/moodle.ini
+echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/moodle.ini
 
-# Iniciar PHP-FPM
+# Iniciar PHP-FPM en segundo plano
 php-fpm -D
 
-# Iniciar Nginx
+# Iniciar Nginx en primer plano
+echo "🌐 Iniciando Nginx..."
 nginx -g 'daemon off;'
